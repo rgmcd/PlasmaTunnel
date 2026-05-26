@@ -113,38 +113,88 @@ fn colorFor(t: f32, mode: f32) -> vec3<f32> {
   return paletteEmber(t);
 }
 
+fn tunnelPath(z: f32, t: f32) -> vec2<f32> {
+  let scale = 0.5 + 0.5 * uniforms.warp;
+  let x = scale * (1.2 * sin(z * 0.11 + t * 0.15) + 0.4 * sin(z * 0.22 - t * 0.25));
+  let y = scale * (1.0 * cos(z * 0.09 + t * 0.12) + 0.3 * cos(z * 0.19 - t * 0.20));
+  return vec2<f32>(x, y);
+}
+
+fn tunnelPathDerivativeZ(z: f32, t: f32) -> vec2<f32> {
+  let scale = 0.5 + 0.5 * uniforms.warp;
+  let dx = scale * (1.2 * 0.11 * cos(z * 0.11 + t * 0.15) + 0.4 * 0.22 * cos(z * 0.22 - t * 0.25));
+  let dy = scale * (-1.0 * 0.09 * sin(z * 0.09 + t * 0.12) - 0.3 * 0.19 * sin(z * 0.19 - t * 0.20));
+  return vec2<f32>(dx, dy);
+}
+
 @fragment
 fn fragmentMain(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
   let smallestAxis = max(min(uniforms.resolution.x, uniforms.resolution.y), 1.0);
   let time = uniforms.time * uniforms.speed;
-  let drift = vec2<f32>(
-    sin(time * 0.16) * 0.125 + sin(time * 0.047) * 0.050,
-    cos(time * 0.12) * 0.085 + sin(time * 0.061) * 0.040
-  );
-  let uv = (fragCoord.xy - uniforms.resolution * 0.5) / smallestAxis - drift;
-  let radius = max(length(uv), 0.015);
-  let angle = atan2(uv.y, uv.x);
-  let tunnelDepth = 1.0 / radius;
+  let uv = (fragCoord.xy - uniforms.resolution * 0.5) / smallestAxis;
   let warp = uniforms.warp;
-  let fall = time * 2.05;
+  let fall = time * 3.15;
+  let cameraZ = fall;
+
+  let tangent = tunnelPathDerivativeZ(cameraZ, time);
+  let eye = -tangent * 1.65;
+  let r_eye = length(uv - eye);
+  let radius = max(r_eye, 0.015);
+
+  let num_steps = 32;
+  let max_z = 35.0;
+  let step_size = max_z / f32(num_steps);
+  var hit = false;
+  var hit_z = max_z;
+  
+  let camera_center = tunnelPath(cameraZ, time);
+  var hit_offset = uv * max_z - (tunnelPath(cameraZ + max_z, time) - camera_center - max_z * tangent);
+  
+  for (var i = 1; i <= num_steps; i = i + 1) {
+    let curr_z = f32(i) * step_size;
+    let world_z = cameraZ + curr_z;
+    let center = tunnelPath(world_z, time) - camera_center - curr_z * tangent;
+    let ray_pos = curr_z * uv;
+    let dist = length(ray_pos - center);
+    
+    if (dist >= 1.0 && !hit) {
+      hit = true;
+      let prev_z = curr_z - step_size;
+      let prev_world_z = cameraZ + prev_z;
+      let prev_center = tunnelPath(prev_world_z, time) - camera_center - prev_z * tangent;
+      let prev_ray_pos = prev_z * uv;
+      let prev_dist = length(prev_ray_pos - prev_center);
+      
+      let t_interp = clamp((1.0 - prev_dist) / max(dist - prev_dist, 0.001), 0.0, 1.0);
+      hit_z = mix(prev_z, curr_z, t_interp);
+      let hit_center = mix(prev_center, center, t_interp);
+      let hit_ray_pos = hit_z * uv;
+      hit_offset = hit_ray_pos - hit_center;
+    }
+  }
+  
+  let tunnelDepth = hit_z;
+  let worldDepth = cameraZ + hit_z;
+  let angle = atan2(hit_offset.y, hit_offset.x);
+  let occlusion = smoothstep(8.0, 22.0, hit_z);
 
   let twist = angle
-    + sin(tunnelDepth * 0.105 + fall * 0.34) * 0.74 * warp
+    + sin(worldDepth * 0.105) * 0.74 * warp
     + cos(radius * 6.60 + time * 0.34) * 0.26 * warp
     + sin(angle * 2.0 + time * 0.28) * 0.18;
 
-  let depthCoord = tunnelDepth * (0.42 + warp * 0.20) + fall;
+  let depthCoord = worldDepth * (0.42 + warp * 0.20);
   let wrapped = vec2<f32>(cos(twist), sin(twist));
   let wrapped3 = vec2<f32>(cos(twist * 3.0 + depthCoord * 0.18), sin(twist * 3.0 + depthCoord * 0.18));
 
   let broadFlow = fbm(wrapped * 2.35 + vec2<f32>(depthCoord * 0.28, -depthCoord * 0.18));
   let fineFlow = fbm(wrapped3 * 4.20 + vec2<f32>(depthCoord * 0.34, depthCoord * 0.16));
   let smokeAngle = angle * 3.0 + broadFlow * 2.8;
-  let smoke = fbm(vec2<f32>(cos(smokeAngle), sin(smokeAngle)) * 2.1 + vec2<f32>(tunnelDepth * 0.15 + fall * 0.22, tunnelDepth * 0.26 + fall * 0.10));
+  let smoke = fbm(vec2<f32>(cos(smokeAngle), sin(smokeAngle)) * 2.1 + vec2<f32>(worldDepth * 0.15, worldDepth * 0.26));
 
-  let ribs = 0.5 + 0.5 * sin(tunnelDepth * (4.45 + warp * 1.35) + broadFlow * 8.1 + sin(twist * 5.0) * 0.78 + fall * 1.35);
-  let spiralRibs = 0.5 + 0.5 * sin(twist * 9.0 + tunnelDepth * 0.76 + fineFlow * 5.4 + fall * 0.46);
-  let waveSheets = 0.5 + 0.5 * sin(tunnelDepth * 0.72 + twist * 4.0 + smoke * 5.8 + fall * 0.62);
+  let ribs = 0.5 + 0.5 * sin(worldDepth * (4.45 + warp * 1.35) + broadFlow * 8.1 + sin(twist * 5.0) * 0.78);
+  let spiralRibs = 0.5 + 0.5 * sin(twist * 9.0 + worldDepth * 0.76 + fineFlow * 5.4);
+  let waveSheets = 0.5 + 0.5 * sin(worldDepth * 0.72 + twist * 4.0 + smoke * 5.8);
   let angularCell = sin(twist * 6.0 + depthCoord * 0.22);
   let cellA = 1.0 - smoothstep(0.030, 0.260, abs(sin(depthCoord * 3.6 + broadFlow * 7.6 + sin(twist * 2.0) * 1.5)));
   let cellB = 1.0 - smoothstep(0.030, 0.240, abs(sin(angularCell * 2.8 - depthCoord * 0.72 + fineFlow * 5.5)));
@@ -153,13 +203,13 @@ fn fragmentMain(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f3
   let ribGlow = smoothstep(0.44, 0.99, ribs) * (0.34 + darkPockets * 0.84);
   let spiralGlow = smoothstep(0.60, 1.0, spiralRibs) * (0.26 + broadFlow * 0.48);
   let mist = smoothstep(0.20, 1.0, broadFlow) * smoothstep(0.28, 0.93, waveSheets);
-  let rushBands = smoothstep(0.46, 1.0, 0.5 + 0.5 * sin(tunnelDepth * 1.18 + fall * 1.75 + smoke * 3.2));
+  let rushBands = smoothstep(0.46, 1.0, 0.5 + 0.5 * sin(worldDepth * 1.18 + smoke * 3.2));
 
   let centerPull = exp(-radius * 7.8);
-  let portal = (1.0 - smoothstep(0.030, 0.185, radius)) * (0.92 + 0.08 * sin(time * 1.65));
-  let farGlow = exp(-radius * 13.5) * (0.76 + 0.24 * sin(time * 1.62 + smoke * 1.6));
+  let portal = (1.0 - smoothstep(0.030, 0.185, radius)) * (0.92 + 0.08 * sin(time * 1.65)) * occlusion;
+  let farGlow = exp(-radius * 13.5) * (0.76 + 0.24 * sin(time * 1.62 + smoke * 1.6)) * occlusion;
   let edgeFade = 1.0 - smoothstep(0.74, 1.34, radius);
-  let wallMask = smoothstep(0.045, 0.22, radius) * edgeFade;
+  let wallMask = mix(1.0, smoothstep(0.045, 0.22, radius), occlusion) * edgeFade;
   let depthShade = clamp(0.34 + tunnelDepth * 0.040, 0.0, 1.18);
   let outerWisps = smoothstep(0.44, 1.02, radius) * edgeFade * smoothstep(0.44, 0.86, smoke) * smoothstep(0.30, 0.90, broadFlow);
 

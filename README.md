@@ -17,3 +17,7 @@ Then visit `http://127.0.0.1:8080/`.
 - `index.html` contains the app shell and controls.
 - `styles.css` handles the full-screen layout.
 - `src/main.js` initializes WebGPU, compiles the shader, and drives animation.
+
+## License
+
+MIT

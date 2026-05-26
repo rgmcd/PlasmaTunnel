@@ -71,6 +71,7 @@ The main texture layers are:
 - `smoke`: Dark pocket modulation.
 - `ribs` and `spiralRibs`: Ring and spiral wall structure.
 - `cellA` and `cellB`: Caustic streak networks.
+- `rippleInterference`: Pond-like overlapping wavefronts on the tunnel wall.
 - `rushBands`: Subtle forward-motion bands.
 - `portal` and `farGlow`: Bright eye at the tunnel center.
 
@@ -86,6 +87,7 @@ The default motion should read as falling into the tunnel:
 
 - Wall features move outward from the center.
 - The bright center remains the perceptual vanishing point.
+- Interference ripples shimmer across the walls and rotate with the current path tangent.
 - Ring and caustic layers drift at slightly different phase rates.
 - Camera drift is gentle, not enough to make the eye feel disconnected from the viewer.
 

@@ -135,6 +135,28 @@ fn tunnelPathDerivativeZ(z: f32, t: f32) -> vec2<f32> {
   return vec2<f32>(dx, dy);
 }
 
+fn rotate2(point: vec2<f32>, angle: f32) -> vec2<f32> {
+  let s = sin(angle);
+  let c = cos(angle);
+  return vec2<f32>(
+    point.x * c - point.y * s,
+    point.x * s + point.y * c
+  );
+}
+
+fn rippleInterference(wallPoint: vec2<f32>, z: f32, rotation: f32, t: f32) -> vec2<f32> {
+  let rotatedWall = rotate2(wallPoint, rotation);
+  let point = vec3<f32>(rotatedWall * 1.65, z * 0.20);
+  let waveA = sin(length(point - vec3<f32>(1.25, -0.25, 0.20)) * 10.8 - t * 0.42);
+  let waveB = sin(length(point - vec3<f32>(-0.65, 1.18, 2.25)) * 12.6 - t * 0.38);
+  let waveC = sin(length(point - vec3<f32>(0.18, -1.42, -1.80)) * 8.9 - t * 0.31);
+  let waveD = sin(length(point - vec3<f32>(-1.32, -0.72, 4.10)) * 7.4 - t * 0.25);
+  let field = (waveA + waveB + waveC + waveD) * 0.25;
+  let shimmer = smoothstep(0.28, 0.92, field);
+  let shadow = smoothstep(0.36, 0.94, -field);
+  return vec2<f32>(shimmer, shadow);
+}
+
 @fragment
 fn fragmentMain(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
   let smallestAxis = max(min(uniforms.resolution.x, uniforms.resolution.y), 1.0);
@@ -220,13 +242,22 @@ fn fragmentMain(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f3
   let wallMask = mix(1.0, smoothstep(0.045, 0.22, radius), occlusion) * edgeFade;
   let depthShade = clamp(0.34 + tunnelDepth * 0.040, 0.0, 1.18);
   let outerWisps = smoothstep(0.44, 1.02, radius) * edgeFade * smoothstep(0.44, 0.86, smoke) * smoothstep(0.30, 0.90, broadFlow);
+  let wallPoint = hit_offset / max(length(hit_offset), 0.001);
+  let curveTangent = tunnelPathDerivativeZ(worldDepth + 1.75, time);
+  let curveRotation = atan2(curveTangent.y, curveTangent.x) * 0.72 + time * 0.075;
+  let ripples = rippleInterference(wallPoint, worldDepth, curveRotation, time);
+  let rippleVisibility = smoothstep(1.2, 8.0, hit_z) * edgeFade;
+  let rippleGlow = ripples.x * rippleVisibility;
+  let rippleShadow = ripples.y * rippleVisibility;
 
-  let brightness = clamp((ribGlow * 0.78 + spiralGlow * 0.42 + caustics * 0.72 + mist * 0.22 + rushBands * 0.16 + centerPull * 0.15) * depthShade, 0.0, 1.28);
-  let colorIndex = clamp(brightness + fineFlow * 0.12 + farGlow * 0.36 + caustics * 0.16, 0.0, 1.0);
+  let brightness = clamp((ribGlow * 0.74 + spiralGlow * 0.38 + caustics * 0.62 + mist * 0.20 + rushBands * 0.14 + rippleGlow * 0.46 + centerPull * 0.15) * depthShade, 0.0, 1.30);
+  let colorIndex = clamp(brightness + fineFlow * 0.10 + farGlow * 0.34 + caustics * 0.13 + rippleGlow * 0.18 - rippleShadow * 0.06, 0.0, 1.0);
 
   var color = colorFor(colorIndex, uniforms.palette);
   color *= (brightness * wallMask + farGlow * 0.92 + portal * 0.92) * uniforms.energy;
   color += colorFor(0.98, uniforms.palette) * (farGlow * 0.64 + portal * 1.14) * uniforms.energy;
+  color += colorFor(0.94, uniforms.palette) * rippleGlow * 0.30 * uniforms.energy;
+  color *= 1.0 - rippleShadow * 0.13;
   color += vec3<f32>(0.04, 0.26, 0.30) * outerWisps * (1.0 - uniforms.palette * 0.22);
   color += vec3<f32>(0.010, 0.020, 0.060) * mist * edgeFade;
 

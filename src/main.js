@@ -13,6 +13,14 @@ const controls = {
   energyValue: document.querySelector("#energy-value"),
 };
 
+const SETTINGS_STORAGE_KEY = "plasmaTunnel.settings.v1";
+const savedSettings = [
+  { key: "speed", control: controls.speed, type: "number" },
+  { key: "warp", control: controls.warp, type: "number" },
+  { key: "energy", control: controls.energy, type: "number" },
+  { key: "palette", control: controls.palette, type: "select" },
+];
+
 const shader = /* wgsl */ `
 struct Uniforms {
   resolution: vec2<f32>,
@@ -259,10 +267,65 @@ function readControlNumber(control) {
   return Number.parseFloat(control.value);
 }
 
+function clampControlValue(control, value) {
+  const min = Number.parseFloat(control.min);
+  const max = Number.parseFloat(control.max);
+
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+
+  return Math.min(Math.max(value, min), max).toFixed(2);
+}
+
 function syncControlLabels() {
   controls.speedValue.value = readControlNumber(controls.speed).toFixed(2);
   controls.warpValue.value = readControlNumber(controls.warp).toFixed(2);
   controls.energyValue.value = readControlNumber(controls.energy).toFixed(2);
+}
+
+function loadSavedSettings() {
+  let parsed;
+
+  try {
+    parsed = JSON.parse(window.localStorage.getItem(SETTINGS_STORAGE_KEY) || "{}");
+  } catch {
+    return;
+  }
+
+  for (const setting of savedSettings) {
+    const savedValue = parsed[setting.key];
+
+    if (setting.type === "number") {
+      const clampedValue = clampControlValue(setting.control, Number.parseFloat(savedValue));
+
+      if (clampedValue !== undefined) {
+        setting.control.value = clampedValue;
+      }
+    }
+
+    if (setting.type === "select") {
+      const optionExists = Array.from(setting.control.options).some((option) => option.value === String(savedValue));
+
+      if (optionExists) {
+        setting.control.value = String(savedValue);
+      }
+    }
+  }
+}
+
+function saveSettings() {
+  const values = {};
+
+  for (const setting of savedSettings) {
+    values[setting.key] = setting.control.value;
+  }
+
+  try {
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(values));
+  } catch {
+    setStatus("Settings changed, but local save is unavailable");
+  }
 }
 
 function resizeCanvas() {
@@ -410,8 +473,13 @@ async function initWebGpu() {
 }
 
 for (const control of [controls.speed, controls.warp, controls.energy]) {
-  control.addEventListener("input", syncControlLabels);
+  control.addEventListener("input", () => {
+    syncControlLabels();
+    saveSettings();
+  });
 }
+
+controls.palette.addEventListener("change", saveSettings);
 
 controls.toggleMotion.addEventListener("click", () => {
   paused = !paused;
@@ -421,6 +489,7 @@ controls.toggleMotion.addEventListener("click", () => {
 });
 
 window.addEventListener("resize", resizeCanvas);
+loadSavedSettings();
 resizeCanvas();
 syncControlLabels();
 initWebGpu().catch((error) => {

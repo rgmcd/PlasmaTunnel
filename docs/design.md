@@ -34,6 +34,8 @@ The HUD exposes four user-facing controls:
 
 The pause/resume button toggles animation time accumulation without tearing down WebGPU state.
 
+Control selections are saved in `localStorage` under `plasmaTunnel.settings.v1`. The app restores `Fall`, `Depth`, `Glow`, and `Palette` before starting WebGPU. Pause state is intentionally not persisted so a new session starts moving.
+
 ## WebGPU Data Model
 
 The shader uses one uniform buffer:

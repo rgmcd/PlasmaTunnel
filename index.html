@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Plasma Tunnel</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <canvas id="plasma-canvas" aria-label="Animated plasma tunnel"></canvas>
+
+      <section class="hud" aria-label="Plasma controls">
+        <div class="brand">
+          <p class="eyebrow">Classic screensaver study</p>
+          <h1>Plasma Tunnel</h1>
+          <p id="status" class="status">Booting shader...</p>
+        </div>
+
+        <div class="controls">
+          <label class="control">
+            <span>Fall</span>
+            <input id="speed" type="range" min="0.10" max="2.20" step="0.01" value="0.86">
+            <output id="speed-value" for="speed">0.86</output>
+          </label>
+
+          <label class="control">
+            <span>Depth</span>
+            <input id="warp" type="range" min="0.40" max="2.40" step="0.01" value="1.35">
+            <output id="warp-value" for="warp">1.35</output>
+          </label>
+
+          <label class="control">
+            <span>Glow</span>
+            <input id="energy" type="range" min="0.50" max="1.80" step="0.01" value="1.18">
+            <output id="energy-value" for="energy">1.18</output>
+          </label>
+
+          <label class="control palette-control">
+            <span>Palette</span>
+            <select id="palette" aria-label="Palette">
+              <option value="0">Classic</option>
+              <option value="1">Aqua</option>
+              <option value="2">Ember</option>
+            </select>
+          </label>
+
+          <button id="toggle-motion" class="icon-button" type="button" aria-label="Pause animation" title="Pause animation">
+            <span class="pause-icon" aria-hidden="true"><span></span><span></span></span>
+          </button>
+        </div>
+      </section>
+
+      <section id="fallback" class="fallback" hidden>
+        <h2>WebGPU unavailable</h2>
+        <p>This browser could not start a WebGPU device. Use a current Chrome or Edge build on localhost with hardware acceleration enabled.</p>
+      </section>
+    </main>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
